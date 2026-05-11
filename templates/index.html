@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Face ID Camera</title>
+  <link rel="stylesheet" href="/static/styles.css" />
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div>
+        <h1>Face ID Camera</h1>
+        <p>Trang nay chi xem camera va ket qua nhan dien. Unknown se duoc gom theo nhom track ID, luu thanh mot group gom nhieu goc mat de review sau.</p>
+      </div>
+      <div class="stats">
+        <div class="stat"><strong id="people-count">0</strong><span>Nguoi da luu</span></div>
+        <div class="stat"><strong id="group-count">0</strong><span>Unknown groups</span></div>
+        <div class="stat"><strong id="camera-state">-</strong><span>Trang thai camera</span></div>
+      </div>
+    </section>
+    <section class="panel">
+      <div class="camera-config stack">
+        <div class="section-head">
+          <div>
+            <h2>Mo Camera</h2>
+            <p>Chon nguon camera tren frontend, luu 1 lan vao backend, sau do bam Bat camera de stream thuc su chay.</p>
+          </div>
+        </div>
+        <div class="row wrap-row">
+          <button type="button" class="source-tab active" data-source-type="webcam">Add webcam</button>
+          <button type="button" class="source-tab secondary" data-source-type="rtsp">Link RTSP</button>
+        </div>
+        <div class="row source-pane" id="webcam-pane">
+          <select id="webcam-select"></select>
+          <button type="button" class="secondary" id="scan-devices">Do webcam</button>
+          <button type="button" id="save-webcam">Luu webcam</button>
+        </div>
+        <div class="status" id="device-status">Nhan Do webcam de tim thiet bi tren may.</div>
+        <div class="row source-pane hidden" id="rtsp-pane">
+          <input id="rtsp-input" type="text" placeholder="rtsp://user:pass@host:554/stream" />
+          <button type="button" id="save-rtsp">Luu RTSP</button>
+        </div>
+        <div class="camera-summary">
+          <div class="stat compact"><strong id="camera-source">-</strong><span>Nguon da chon</span></div>
+          <div class="stat compact"><strong id="camera-connected">-</strong><span>Da ket noi</span></div>
+          <div class="stat compact"><strong id="camera-success">-</strong><span>Thanh cong</span></div>
+        </div>
+        <div class="actions">
+          <button type="button" id="start-camera">Bat camera</button>
+          <button type="button" class="secondary" id="stop-camera">Tat camera</button>
+        </div>
+      </div>
+      <img class="video" id="video-feed" alt="Video stream" />
+      <div class="status" id="status-line">Dang tai trang thai...</div>
+      <div class="actions">
+        <a href="/review">Mo trang review groups</a>
+        <a class="secondary" href="/api/state" target="_blank">Xem JSON state</a>
+      </div>
+    </section>
+  </div>
+  <script src="/static/camera.js"></script>
+</body>
+</html>
