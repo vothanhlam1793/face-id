@@ -1,0 +1,17 @@
+[Unit]
+Description=NOVA People Portal
+After=network-online.target
+
+[Service]
+User=leco
+WorkingDirectory=/home/leco/speaker/face
+ExecStart=/usr/bin/bash /home/leco/speaker/face/run.sh
+Restart=on-failure
+RestartSec=3
+Environment=HOST=10.7.0.21
+Environment=PORT=8020
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

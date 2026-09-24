@@ -1,183 +1,179 @@
-# Face ID Local Web App
+# Face-ID For Tibo
 
-Ung dung local de:
+## Purpose
 
-- Doc webcam realtime
-- Detect khuon mat bang YOLO
-- Nhan dien bang face embedding
-- Gom khuon mat chua ro thanh `unknown groups`
-- Review va gan ten qua web UI
-- Import anh/video de quet khuon mat offline
-- Luu kho anh theo tung nguoi de sau nay rebuild embedding khi doi model
+Face-ID is the perception layer that lets Tibo immediately recognize who is
+physically in front of its PTZ camera. It is not primarily an attendance
+system. Identity should give Tibo social awareness, correct forms of address,
+and a reliable authorization signal for sensitive commands.
 
-## Trang thai hien tai
+Primary interaction:
 
-Project da hoat dong voi cac kha nang chinh:
+> "Tibo chao anh Ai di."
 
-- Webcam stream tren trang `/`
-- Review unknown groups tren `/review`
-- Tracking toi gian theo IoU cho webcam va video import
-- Import anh `JPG`, `PNG`, `HEIC`
-- Import video `MP4`, `MOV`, `M4V`, `AVI`
-- Auto merge pending groups neu embedding giong nhau tren nguong cao
-- Sau khi gan ten, anh duoc doi vao thu muc rieng trong `people/`
-- Co nut `Rebuild embeddings` de tao lai vector nhan dien tu kho anh da luu
+Expected behavior:
 
-## Cau truc du an
+1. Resolve `Anh Ai` to `person_ai` and the `seat_ai` spatial anchor.
+2. Move the A42 PTZ to the stored seat angle: pan `42.0`, tilt `14.5`.
+3. Wait for the camera to settle, capture a current go2rtc frame, and run
+   face recognition.
+4. Only greet if the face match confirms Anh Ai.
+5. If the seat is empty, occupied by someone else, or the match is uncertain,
+   report that fact instead of greeting an empty chair or misidentifying a
+   person.
+
+When speaker output is enabled, a successful greeting should be short and
+natural, for example: "Em chao anh Ai. Chuc anh lam viec vui ve a."
+
+## Desired Capabilities
+
+- Identify all known faces visible in the current A42 frame.
+- Answer "Ai dang truoc mat em?" with a name, score, and `unknown` state.
+- Verify the intended person after PTZ moves to a known seat.
+- Pass the confirmed identity into voice conversations rather than assuming
+  every speaker is Anh Lam.
+- Update the spatial presence model only after sufficient confidence.
+- Enforce Master-only actions with confirmed identity, not a hardcoded default.
+
+## Existing Tibo Assets
+
+### Camera and spatial model
+
+- PTZ camera: IMOU Ranger 2 / IPC-A42-L.
+- Current A42 image source: go2rtc frame endpoint, exposed by StationWatch as
+  `GET /api/camera/frame` in `backend/main.py`.
+- PTZ actions: `POST /api/camera/goto_angle`.
+- Spatial profiles and presence data live in the external spatial SQLite model
+  used by `onvif-ptz-control`.
+- Person profiles already have a `face_gallery` field.
+- Seat anchors documented in the existing spatial system:
+
+| Person | Person ID | Seat | Pan | Tilt |
+| --- | --- | --- | ---: | ---: |
+| Vo Thanh Lam | `person_lam` | `seat_lam` | 114.4 | 5.9 |
+| Vinh | `person_vinh` | `seat_vinh` | 32.0 | 14.5 |
+| Ai | `person_ai` | `seat_ai` | 42.0 | 14.5 |
+| Thanh | `person_thanh` | `seat_thanh` | 54.0 | 14.5 |
+
+### Tibo modules to integrate
+
+- `backend/agent/listener_worker.py`: point to identify the person who spoke
+  after a wake word is detected.
+- `backend/agent/robot_brain.py`: receives confirmed identity and produces the
+  appropriate personalized answer.
+- `backend/agent/master_verifier.py`: must replace its current permissive
+  behavior with actual face-backed authorization.
+- `backend/agent/tools/perception_tools.py`: add tools for current-frame face
+  identification and look-at-person-and-verify.
+- `web/src/components/VideoPTZPanel.tsx`: add an operator-triggered "Ai dang
+  truoc mat?" action and an identity overlay on the live frame.
+
+## Face-ID Model & Architecture
+
+Face recognition is built directly from the official **NOVA Dataset** (`face/gallery/NOVA/`):
+
+Pipeline:
 
 ```text
-face-id/
-  app/
-    api/
-      dependencies.py
-      routes_groups.py
-      routes_pages.py
-      routes_state.py
-    core/
-      database.py
-      models.py
-      services.py
-    vision/
-      detector.py
-      embedder.py
-      recognizer.py
-      tracker.py
-    config.py
-    main.py
-  static/
-    camera.js
-    review.js
-    styles.css
-  templates/
-    index.html
-    review.html
-  models/
-  people/
-  snapshots/
-  requirements.txt
-  README.md
-  SESSION_HANDOFF.md
-  ROADMAP.md
+YOLOv8n-face + ByteTrack -> InsightFace buffalo_l / ArcFace -> 512D embedding
+-> cosine similarity against known face embeddings
 ```
 
-## Doc code theo thu tu
+Important: do not mix embeddings generated from different preprocessing
+pipelines. The enrollment gallery and runtime recognition must use the same
+chosen pipeline.
 
-De vao session moi, doc theo thu tu nay:
+## Official Gallery Dataset (NOVA)
 
-1. `SESSION_HANDOFF.md`
-2. `README.md`
-3. `ROADMAP.md`
-4. `app/main.py`
-5. `app/config.py`
-6. `app/core/services.py`
-7. `app/core/database.py`
-8. `app/vision/tracker.py`
-9. `app/vision/recognizer.py`
-10. `app/api/routes_groups.py`
-11. `templates/review.html` va `static/review.js`
+The gallery dataset has been imported and structured under `face/gallery/NOVA/`:
 
-## Cai dat
+1. **Technology Center (Core Scope)**:
+   - Path: `face/gallery/NOVA/technology-center-org-chart/photos/`
+   - Total photos: 77 members (including Lam, Ai, Vinh, Thanh, Chinh, Trang, etc.)
+   - Metadata: `org-chart.json` with Vietnamese full names, roles, and hierarchy.
 
-```bash
-cd /Users/macos/Documents/Linh-tinh/face-id
-python3.12 -m venv .venv
-source .venv/bin/activate
-python -m pip install --upgrade pip
-python -m pip install -r requirements.txt
-mkdir -p models
-curl -L "https://github.com/YapaLab/yolo-face/releases/download/1.0.0/yolov8n-face.pt" -o models/yolov8n-face.pt
+2. **Organization-wide (Extended Scope)**:
+   - Path: `face/gallery/NOVA/organization-org-chart/photos/`
+   - Total photos: 2,491 members across the group.
+   - Metadata: `active-directory.json`, `unit-manifest.json`.
+
+## Integration Design
+
+### Phase 1: on-demand recognition
+
+Implement a narrow local recognition API, for example:
+
+```text
+POST /api/face/identify-current-frame
+-> {
+     "faces": [
+       {
+         "person_id": "person_ai",
+         "name": "Anh Ai",
+         "score": 0.78,
+         "bbox": [x1, y1, x2, y2],
+         "status": "confirmed"
+       }
+     ]
+   }
 ```
 
-## Chay app
+This endpoint should fetch the current go2rtc JPEG internally. It must be
+read-only: no attendance writes, no automatic creation of unknown-face groups.
 
-```bash
-cd /Users/macos/Documents/Linh-tinh/face-id
-source .venv/bin/activate
-uvicorn app.main:app --reload
+Recognition result policy:
+
+- `confirmed`: score meets the operational threshold and is sufficiently ahead
+  of the runner-up candidate.
+- `uncertain`: face exists but score/margin is insufficient; do not speak the
+  candidate name as fact.
+- `unknown`: a usable face has no known match.
+- `no_face`: no usable face is present in the frame.
+
+### Phase 2: social PTZ action
+
+Add a compound tool along these lines:
+
+```text
+look_at_person_and_verify(person_id)
+  -> resolve anchor
+  -> PTZ goto pan/tilt
+  -> wait for settling
+  -> identify current frame
+  -> return expected-person verification result
 ```
 
-Mo trinh duyet tai `http://127.0.0.1:8000`
+The Brain should call this before responding to requests to greet, find, or
+address a named person. TTS happens only after the tool confirms the target.
 
-## Luong su dung
+### Phase 3: voice identity and presence
 
-1. Mo `/` de xem webcam va ket qua nhan dien.
-2. Khi gap khuon mat chua chac chan, he thong tao `unknown group`.
-3. Neu la webcam hoac video, nhieu frame cua cung nguoi se duoc gom vao cung group.
-4. Mo `/review` de xu ly.
-5. Tai `/review`, ban co the:
-   - `Tao moi`
-   - `Gan nguoi cu`
-   - `Nhan goi y`
-   - `Xoa anh` xau trong group
-   - `Import anh`
-   - `Nhan dien hang loat groups`
-   - `Rebuild embeddings`
-6. Khi group duoc gan ten, toan bo anh trong group se duoc doi vao thu muc cua nguoi do trong `people/`.
+- After a wake word, recognize the current person before calling the Brain.
+- Pass the actual `person_id` and display name to the conversation session.
+- Require a confirmed `person_lam` match for Master-only operations.
+- Use temporal smoothing (multiple consistent frames) before updating
+  `daily_presence` or treating a person as present.
 
-## Luong import du lieu
+## Current Gaps To Fix
 
-### Import anh
+- `backend/agent/master_verifier.py` currently grants access unconditionally.
+- `backend/agent/listener_worker.py` currently passes `user_name="Anh Lam"`
+  for every voice interaction.
+- The current StationWatch runtime in `backend/main.py` still uses the older
+  `onvif-ptz-control` spatial agent directly, while the newer independent
+  Tibo agent modules exist alongside it. Reconcile this before wiring Face-ID
+  into production flow.
+- `face.besen.vn` is unavailable: its TLS certificate expired on 2026-08-26
+  and its reverse proxy returned HTTP 502 during verification. Its local
+  source and model assets remain usable at `/home/leco/hr-face-id`.
+- StationWatch needs authentication, session-scoped WebSocket events, and
+  tighter CORS before exposing face identity data beyond a trusted local
+  network.
 
-- Ho tro: `JPG`, `PNG`, `HEIC`
-- Moi khuon mat detect duoc tu anh se tao group moi luc dau
-- Sau do he thong co gang auto merge cac group pending neu giong nhau
+## Next Implementation Steps
 
-### Import video
-
-- Ho tro: `MP4`, `MOV`, `M4V`, `AVI`
-- Video duoc xu ly nhu stream offline
-- He thong doc frame lien tuc
-- Detect tat ca khuon mat trong frame
-- Tracker bam theo IoU de giu cung track/group cho cung nguoi
-- Tot hon cach lay mau 12 frame mot lan
-
-## Kho du lieu anh
-
-Co 2 vung luu anh:
-
-- `snapshots/`: anh tam, unknown, anh moi crop ra truoc khi gan ten
-- `people/`: kho anh chinh thuc theo tung nguoi sau khi da gan ten
-
-Sau khi da gan ten:
-
-- DB van luu `snapshot_path`
-- Nhung file anh se nam trong `people/<ten-nguoi>-<id>/`
-- Day la nguon du lieu de rebuild embedding sau nay
-
-## Rebuild embeddings
-
-Nut `Rebuild embeddings` tren `/review` se:
-
-1. Doc tung thu muc trong `people/`
-2. Load tung anh da luu
-3. Tinh lai embedding bang model hien tai
-4. Xoa embedding cu trong `face_samples`
-5. Ghi lai embedding moi
-
-Y nghia:
-
-- Neu sau nay doi tu `FaceNet` sang `ArcFace`
-- Van co the dung kho anh cu de tao lai toan bo he thong nhan dien
-
-## Luu y ky thuat
-
-- Tracker hien tai la tracker nhe dua tren IoU
-- Face embedding hien tai dang dung `facenet-pytorch`
-- Detect dang dung `yolov8n-face.pt`
-- Auto merge group import dang dung nguong `0.80`
-- Nhan dien tu dong nguoi da biet dung nguong cao hon
-
-## Cac file quan trong nhat
-
-- `app/core/services.py`: logic nghiep vu trung tam
-- `app/core/database.py`: schema va thao tac SQLite
-- `app/vision/tracker.py`: logic track ID
-- `app/vision/recognizer.py`: best match va suggestion
-- `app/api/routes_groups.py`: action quan ly group/import/rebuild
-
-## Viec nen lam tiep neu mo rong
-
-1. Doi embedding sang ArcFace
-2. Nang cap tracker tu IoU sang IoU + embedding hoac tracker manh hon
-3. Them progress bar cho import video lon
-4. Them trang xem chi tiet tung nguoi va kho anh cua ho
+1. Extract and index embeddings from `face/gallery/NOVA/` using InsightFace buffalo_l.
+2. Implement on-demand current-frame recognition endpoint with result overlays.
+3. Implement `look_at_person_and_verify` and the greet-person behavior.
+4. Calibrate thresholds with real A42 frames at each seat.
+5. Connect verified identity to voice sessions and Master authorization.

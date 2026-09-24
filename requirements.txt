@@ -1,7 +1,7 @@
-ultralytics>=8.3.0
-opencv-python>=4.10.0
-fastapi>=0.115.0
-uvicorn[standard]>=0.32.0
-facenet-pytorch>=2.6.0
-python-multipart>=0.0.12
-pillow-heif>=0.18.0
+fastapi==0.136.1
+uvicorn==0.47.0
+opencv-python==4.11.0.86
+numpy>=2.0,<3
+Pillow>=11,<13
+python-multipart>=0.0.20,<1
+httpx>=0.28,<1

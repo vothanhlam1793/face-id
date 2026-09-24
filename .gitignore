@@ -1,10 +1,7 @@
-.env
-.venv/
+data/
+gallery/
+raw_data/
 __pycache__/
-*.pyc
-*.pyo
-*.pyd
-.DS_Store
-face_id.db
-people/
-snapshots/
+.venv/
+web/node_modules/
+web/dist/
